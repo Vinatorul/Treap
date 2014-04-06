@@ -2,7 +2,8 @@ program Treap;
 
 uses
   Vcl.Forms,
-  DebugUnit in 'DebugUnit.pas' {Form1};
+  DebugUnit in 'DebugUnit.pas' {Form1},
+  TreapUnit in 'TreapUnit.pas';
 
 {$R *.res}
 

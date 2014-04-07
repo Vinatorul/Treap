@@ -112,33 +112,36 @@ end;
 class function TTreap<T>.Merge(var aLeft, aRight: TTreap<T>): TTreap<T>;
 var
   vRoot: TTreap<T>;
-  vTempTreapP: ^TTreap<T>;
   vTempTreap: TTreap<T>;
-  vStack: TStack<TTreap<T>>;
+  vStack: TObjectStack<TTreap<T>>;
 begin
-  vTempTreapP := @vRoot;
-  vStack := TStack<TTreap<T>>.Create;
+  vTempTreap := nil;
+  vRoot := nil;
+  vStack := TObjectStack<TTreap<T>>.Create(False);
   try
     while Assigned(aLeft) and Assigned(aRight) do
       if aLeft.FPriority > aRight.FPriority then
       begin
-        vTempTreapP^ := aLeft;
+        vTempTreap := aLeft;
+        if not Assigned(vRoot) then
+          vRoot := aLeft;
         vStack.Push(aLeft);
-        vTempTreapP := @aLeft.FRight;
-        aLeft := vTempTreapP^;
+        vTempTreap := aLeft.FRight;
+        aLeft := vTempTreap;
       end
       else
       begin
-        vTempTreapP^ := aRight;
+        if not Assigned(vRoot) then
+          vRoot := aRight;
+        vTempTreap := aRight;
         vStack.Push(aRight);
-        vTempTreapP := @aRight.FLeft;
-        aRight := vTempTreapP^;
+        vTempTreap := aRight.FLeft;
+        aRight := vTempTreap;
       end;
-
     if Assigned(aLeft) then
-      vTempTreapP^ := aLeft
+      vTempTreap := aLeft
     else
-      vTempTreapP^ := aRight;
+      vTempTreap := aRight;
     Result := vRoot;
     while vStack.Count > 0 do
     begin

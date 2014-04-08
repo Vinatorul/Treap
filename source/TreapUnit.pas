@@ -10,6 +10,8 @@ type
   TTreapArray<T> = class
   private
     FTreap: TTreap<T>;
+    FUpdStack: TObjectStack<TTreap<T>>;
+    procedure ActualizeSizes;
   public
     constructor Create;
     destructor Destroy; override;
@@ -22,13 +24,13 @@ type
     FData: T;
     FSize: Integer;
     FPriority: Integer;
-
-    procedure ActualizeSize;
   public
     constructor Create(const aData: T; const aPriority: Integer;
       const aLeft: TTreap<T>; const aRight: TTreap<T>);
 
-    class function Merge(var aLeft, aRight: TTreap<T>): TTreap<T>;
+    class function Merge(var aLeft, aRight: TTreap<T>; var aUpdStack: TObjectStack<TTreap<T>>): TTreap<T>;
+
+    procedure ActualizeSize;
     procedure Split(const aIndex: Integer; out aLeft, aRight: TTreap<T>);
     procedure Insert(const aPosition: Integer; const aData: T);
     procedure Remove(const aPosition: Integer; const aData: T);
@@ -100,69 +102,53 @@ begin
 
 end;
 
-class function TTreap<T>.Merge(var aLeft, aRight: TTreap<T>): TTreap<T>;
-const
-  cLeft = -1;   // находимся в левом дереве
-  cRight = 1;   // находимся в правом дереве
+class function TTreap<T>.Merge(var aLeft, aRight: TTreap<T>; var aUpdStack: TObjectStack<TTreap<T>>): TTreap<T>;
 var
   vRoot: TTreap<T>;
   vTempTreap: TTreap<T>;
-  vUpdStack: TObjectStack<TTreap<T>>;
-  vWay: Integer;
+  vIsLeft: Boolean;
 begin
   vTempTreap := nil;
   vRoot := nil;
-  vUpdStack := TObjectStack<TTreap<T>>.Create(False);// Стек узлов на актуализацию
-  try
-    // На каждом шаге выбирается вершина, у которой больше приоритет
-    while Assigned(aLeft) and Assigned(aRight) do
-      if aLeft.FPriority > aRight.FPriority then
-      begin
-        if not Assigned(vRoot) then  // первая итерация?
-          vRoot := aLeft
-        else if vWay = cRight then    // менялось ли дерево
-          vTempTreap.FLeft := aLeft;  // "перецепляем" ветку
-        vUpdStack.Push(aLeft);       // запоминаем для актуализации
-        vTempTreap := aLeft;
-        aLeft := aLeft.FRight;   // двигаемся в правое поддерево левого дерева (это нужно для "безболезненной" склейки массивов)
-        vWay := cLeft;           // сигнализируем, что мы были в левом дереве
-      end
-      else
-      begin
-        if not Assigned(vRoot) then   // первая итерация?
-          vRoot := aRight
-        else if vWay = cLeft then    // менялось ли дерево
-          vTempTreap.FRight := aRight;  // "перецепляем" ветку
-        vUpdStack.Push(aRight);       // запоминаем для актуализации
-        vTempTreap := aRight;
-        aRight := aRight.FLeft; // двигаемся в левое поддерево правого дерева (это нужно для "безболезненной" склейки массивов)
-        vWay := cRight;         // сигнализируем, что мы были в правом дереве
-      end;
-    if Assigned(aLeft) then
+  // На каждом шаге выбирается вершина, у которой больше приоритет
+  while Assigned(aLeft) and Assigned(aRight) do
+    if aLeft.FPriority > aRight.FPriority then
     begin
-      if not Assigned(vRoot) then   // первая итерация?
+      if not Assigned(vRoot) then  // первая итерация?
         vRoot := aLeft
-      else if vWay = cRight then
-        vTempTreap.FLeft := aLeft  // правое дерево кончилось => полностью "перецепляем" левое
-
+      else if not vIsLeft then    // менялось ли дерево
+        vTempTreap.FLeft := aLeft;  // "перецепляем" ветку
+      aUpdStack.Push(aLeft);       // запоминаем для актуализации
+      vTempTreap := aLeft;
+      aLeft := aLeft.FRight;   // двигаемся в правое поддерево левого дерева (это нужно для "безболезненной" склейки массивов)
+      vIsLeft := True;           // сигнализируем, что мы были в левом дереве
     end
     else
     begin
       if not Assigned(vRoot) then   // первая итерация?
         vRoot := aRight
-      else if vWay = cLeft then
-        vTempTreap.FRight := aRight  // левое дерево кончилось => полностью "перецепляем" правое
+      else if vIsLeft then    // менялось ли дерево
+        vTempTreap.FRight := aRight;  // "перецепляем" ветку
+      aUpdStack.Push(aRight);       // запоминаем для актуализации
+      vTempTreap := aRight;
+      aRight := aRight.FLeft; // двигаемся в левое поддерево правого дерева (это нужно для "безболезненной" склейки массивов)
+      vIsLeft := False;         // сигнализируем, что мы были в правом дереве
     end;
-    Result := vRoot;
-    while vUpdStack.Count > 0 do  // актуализация
-    begin
-      vTempTreap := vUpdStack.Peek;
-      vUpdStack.Pop;
-      vTempTreap.ActualizeSize;
-    end;
-  finally
-    vUpdStack.Free;
+  if Assigned(aLeft) then
+  begin
+    if not Assigned(vRoot) then   // первая итерация?
+      vRoot := aLeft
+    else if not vIsLeft then
+      vTempTreap.FLeft := aLeft  // правое дерево кончилось => полностью "перецепляем" левое
+  end
+  else
+  begin
+    if not Assigned(vRoot) then   // первая итерация?
+      vRoot := aRight
+    else if vIsLeft then
+      vTempTreap.FRight := aRight  // левое дерево кончилось => полностью "перецепляем" правое
   end;
+  Result := vRoot;
 end;
 
 procedure TTreap<T>.Split(const aIndex: Integer; out aLeft, aRight: TTreap<T>);
@@ -172,15 +158,27 @@ end;
 
 { TTreapArray<T> }
 
+procedure TTreapArray<T>.ActualizeSizes;
+begin
+  while FUpdStack.Count > 0 do  // актуализация
+    begin
+      FUpdStack.Peek.ActualizeSize;
+      FUpdStack.Pop;
+    end;
+end;
+
 constructor TTreapArray<T>.Create;
 begin
   FTreap := nil;
+  FUpdStack := TObjectStack<TTreap<T>>.Create(False);
 end;
 
 destructor TTreapArray<T>.Destroy;
 begin
   if Assigned(FTreap) then
     FTreap.Free;
+  if Assigned(FUpdStack) then
+    FUpdStack.Free;
   inherited;
 end;
 

@@ -2,7 +2,7 @@ unit TreapUnit;
 
 interface
 
-uses Generics.Defaults, Generics.Collections;
+uses Generics.Defaults, Generics.Collections, System.SysUtils;
 
 type
   TTreap<T> = class;
@@ -10,11 +10,22 @@ type
   TTreapArray<T> = class
   private
     FTreap: TTreap<T>;
+    FSize: Integer;
     FUpdStack: TObjectStack<TTreap<T>>;
     procedure ActualizeSizes;
   public
     constructor Create;
     destructor Destroy; override;
+
+    procedure Insert(const aPosition: Integer; const aData: T);
+    procedure Remove(const aPosition: Integer);
+    procedure Add(const aData: T);
+
+    function High: Integer;
+    function Count: Integer;
+
+    class procedure Split(const aArray: TTreapArray<T>; const aInd: Integer;
+      out aLeftPart, aRightPart: TTreapArray<T>);
   end;
 
   TTreap<T> = class
@@ -28,25 +39,22 @@ type
     constructor Create(const aData: T; const aPriority: Integer;
       const aLeft: TTreap<T>; const aRight: TTreap<T>);
 
-    class function Merge(var aLeft, aRight: TTreap<T>; var aUpdStack: TObjectStack<TTreap<T>>): TTreap<T>;
+    class function Merge(var aLeft, aRight: TTreap<T>;
+      const aUpdStack: TObjectStack<TTreap<T>>): TTreap<T>;
+    class procedure Split(const aIndex: Integer; const aTreap: TTreap<T>;
+      out aLeft, aRight: TTreap<T>; const aUpdStack: TObjectStack<TTreap<T>>);
 
     procedure ActualizeSize;
-    procedure Split(const aIndex: Integer; out aLeft, aRight: TTreap<T>);
-    procedure Insert(const aPosition: Integer; const aData: T);
-    procedure Remove(const aPosition: Integer; const aData: T);
+
     function FindByInd(const aInd: Integer): TTreap<T>;
   end;
 
 const
-  cRandCoof = 1000;
+  cRandCoef = 10000;
 
 implementation
 
 { TTreap<T> }
-
-procedure TTreap<T>.Insert(const aPosition: Integer; const aData: T);
-begin
-end;
 
 procedure TTreap<T>.ActualizeSize;
 begin
@@ -74,15 +82,16 @@ var
   vInd: Integer;
 begin
   vTreap := Self;
-  vInd := aInd ;
+  vInd := aInd;
   while Assigned(vTreap) do
   begin
-    // Проверяем количество элементов в левом поддереве. Если равно индексу, то корень - искомый узел
+    // Проверяем количество элементов в левом поддереве.
+    // Если равно индексу, то корень - искомый узел
     // Если больше, чем индекс, то будем искать в левом поддереве
     // Если меньше, чем индекс, то будем искать в правом поддереве
     vLeftSize := 0;
     if Assigned(vTreap.FLeft) then
-      vLeftSize := vTreap.FLeft.FSize;
+      vLeftSize := vTreap.FLeft.FSize + 1;
     if vLeftSize = vInd then
       Exit(vTreap);
 
@@ -91,18 +100,14 @@ begin
     else
     begin
       vTreap := vTreap.FRight;
-      Dec(vInd, vLeftSize + 1);
+      Dec(vInd, vLeftSize);
     end;
   end;
   Result := nil;
 end;
 
-procedure TTreap<T>.Remove(const aPosition: Integer; const aData: T);
-begin
-
-end;
-
-class function TTreap<T>.Merge(var aLeft, aRight: TTreap<T>; var aUpdStack: TObjectStack<TTreap<T>>): TTreap<T>;
+class function TTreap<T>.Merge(var aLeft, aRight: TTreap<T>;
+  const aUpdStack: TObjectStack<TTreap<T>>): TTreap<T>;
 var
   vRoot: TTreap<T>;
   vTempTreap: TTreap<T>;
@@ -151,35 +156,169 @@ begin
   Result := vRoot;
 end;
 
-procedure TTreap<T>.Split(const aIndex: Integer; out aLeft, aRight: TTreap<T>);
+class procedure TTreap<T>.Split(const aIndex: Integer; const aTreap: TTreap<T>;
+  out aLeft, aRight: TTreap<T>; const aUpdStack: TObjectStack<TTreap<T>>);
+var
+  vCurIndex: Integer;
+  vTreap: TTreap<T>;
+  vTempLeft: TTreap<T>;
+  vTempRight: TTreap<T>;
+  vInd: Integer;
 begin
-
+  if not Assigned(aTreap) then
+    Exit;
+  vTreap := aTreap;
+  aLeft := nil;
+  aRight := nil;
+  vTempLeft := nil;
+  vTempRight := nil;
+  vInd := aIndex;
+  while Assigned(vTreap) do
+  begin
+    vCurIndex := 0;
+    if Assigned(vTreap.FLeft) then
+      vCurIndex := vTreap.FLeft.FSize;
+    if vCurIndex >= vInd then
+    // Если искомый индекс меньше количества элементов левого поддерева, то будем искать в нём
+    begin
+      if Assigned(aRight) then
+      begin
+        vTempRight.FLeft := vTreap;
+        vTempRight := vTempRight.FLeft;
+        aUpdStack.Push(vTempRight);
+      end
+      else
+      begin
+        aRight := vTreap;
+        vTempRight := aRight;
+      end;
+      vTreap := vTreap.FLeft;
+    end
+    else if vCurIndex < vInd then
+    // Если искомый индекс больше количества элементов левого поддерева, то будем искать в правом поддереве
+    begin
+      if Assigned(aLeft) then
+      begin
+        vTempLeft.FRight := vTreap;
+        vTempLeft := vTempLeft.FRight;
+        aUpdStack.Push(vTempRight);
+      end
+      else
+      begin
+        aLeft := vTreap;
+        vTempLeft := aLeft;
+      end;
+      vTreap := vTreap.FRight;
+      Dec(vInd, vCurIndex + 1);
+    end;
+  end;
+  if Assigned(vTempLeft) then
+  begin
+    vTempLeft.FRight := nil;
+    aUpdStack.Push(vTempLeft);
+  end;
+  if Assigned(vTempRight) then
+  begin
+    vTempRight.FLeft := nil;
+    aUpdStack.Push(vTempRight);
+  end;
 end;
 
 { TTreapArray<T> }
 
 procedure TTreapArray<T>.ActualizeSizes;
+var
+  vTempTreap: TTreap<T>;
 begin
   while FUpdStack.Count > 0 do  // актуализация
     begin
-      FUpdStack.Peek.ActualizeSize;
+      vTempTreap := FUpdStack.Peek;
+      if Assigned(vTempTreap) then
+        vTempTreap.ActualizeSize;
       FUpdStack.Pop;
     end;
+end;
+
+procedure TTreapArray<T>.Add(const aData: T);
+begin
+  Insert(FSize, aData);
+end;
+
+function TTreapArray<T>.Count: Integer;
+begin
+  Result := FSize;
 end;
 
 constructor TTreapArray<T>.Create;
 begin
   FTreap := nil;
   FUpdStack := TObjectStack<TTreap<T>>.Create(False);
+  FSize := 0;
 end;
 
 destructor TTreapArray<T>.Destroy;
 begin
-  if Assigned(FTreap) then
+  if Assigned(FTreap) then  // ToDo: доделать цепное удаление
     FTreap.Free;
   if Assigned(FUpdStack) then
     FUpdStack.Free;
   inherited;
+end;
+
+function TTreapArray<T>.High: Integer;
+begin
+  Result := FSize - 1;
+end;
+
+procedure TTreapArray<T>.Insert(const aPosition: Integer; const aData: T);
+var
+  vNewTreap: TTreap<T>;
+  vLeftPart: TTreap<T>;
+  vRightPart: TTreap<T>;
+  vTempTreap: TTreap<T>;
+begin
+  if not Assigned(FTreap) then
+    FTreap := TTreap<T>.Create(aData, Random(cRandCoef), nil, nil)
+  else
+  begin
+    TTreap<T>.Split(aPosition, FTreap, vLeftPart, vRightPart, FUpdStack);
+    vNewTreap := TTreap<T>.Create(aData, Random(cRandCoef), nil, nil);
+    try
+      vTempTreap := TTreap<T>.Merge(vLeftPart, vNewTreap, FUpdStack);
+      FTreap := TTreap<T>.Merge(vTempTreap, vRightPart, FUpdStack);
+      Inc(FSize);
+      FUpdStack.Push(FTreap);
+    except
+      vNewTreap.Free;
+    end;
+  end;
+  ActualizeSizes;
+end;
+
+procedure TTreapArray<T>.Remove(const aPosition: Integer);
+var
+  vTempTreap: TTreap<T>;
+  vTempLeft, vTempRight: TTreap<T>;
+  vMid: TTreap<T>;
+  vNewRight: TTreap<T>;
+begin
+  if not Assigned(FTreap) then
+    raise ERangeError.Create('Элемента с номером ' + IntToStr(aPosition) + ' не существует');
+  TTreap<T>.Split(aPosition, FTreap, vTempLeft, vTempRight, FUpdStack);
+  ActualizeSizes;
+  if not Assigned(vTempRight) then
+    raise ERangeError.Create('Элемента с номером ' + IntToStr(aPosition) + ' не существует');
+  TTreap<T>.Split(1, vTempRight, vMid, vNewRight, FUpdStack);
+  FTreap := TTreap<T>.Merge(vTempLeft, vNewRight, FUpdStack);
+  Dec(FSize);
+  vMid.Free;
+  ActualizeSizes;
+end;
+
+class procedure TTreapArray<T>.Split(const aArray: TTreapArray<T>;
+  const aInd: Integer; out aLeftPart, aRightPart: TTreapArray<T>);
+begin
+
 end;
 
 end.
